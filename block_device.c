@@ -115,3 +115,16 @@ int is_end_of_device(int block_num) {
     return 0;
 }
 
+// Функция для форматирования блочного устройства
+void format_block_device() {
+    // Буфер для хранения данных блока
+    char block_buffer[BLOCK_SIZE];
+
+    // Заполнение блока нулями
+    memset(block_buffer, 0, BLOCK_SIZE);
+
+    // Запись нулевого блока во все блоки устройства
+    for (int i = 0; i < TOTAL_BLOCKS; ++i) {
+        write_block(i, block_buffer, BLOCK_SIZE);
+    }
+}
