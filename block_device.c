@@ -1,25 +1,34 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <fcntl.h>
-#include <unistd.h>
+#include <ncurses.h>
+#include <ctype.h>
 #include <sys/stat.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <dirent.h> 
+#include <string.h>
 #include "block_device.h"
 
-\
-void read_block(int block_num, char *buffer) {
-    int fd;
-    off_t offset;
-    ssize_t bytes_read;
+#define BYTES_PER_LINE 16
+#define BLOCK_SIZE 512 // Примерное значение, замените его на фактический размер блока
+#define TOTAL_BLOCKS 2048 // Примерное общее количество блоков в блочном устройстве
+#define TOP_MARGIN 1   // Отступ сверху
+#define LEFT_MARGIN 4  // Отступ слева
+#define MAX_DEVICES 10 // Максимальное количество блочных устройств
 
+// Функция для чтения блока
+void read_block(const char *block_device_name, int block_num, char *buffer) {
     // Открываем файл блока устройства SSD
-    fd = open("/dev/nvme0n1p7", O_RDONLY);
+    char path[512];
+    snprintf(path, sizeof(path), "/dev/%s", block_device_name);
+    int fd = open(path, O_RDONLY);
     if (fd == -1) {
         perror("open");
         exit(EXIT_FAILURE);
     }
 
     // Вычисляем смещение для чтения блока
-    offset = (off_t) block_num * BLOCK_SIZE;
+    off_t offset = (off_t) block_num * BLOCK_SIZE;
 
     // Позиционируемся на нужном блоке
     if (lseek(fd, offset, SEEK_SET) == -1) {
@@ -29,7 +38,7 @@ void read_block(int block_num, char *buffer) {
     }
 
     // Читаем содержимое блока
-    bytes_read = read(fd, buffer, BLOCK_SIZE);
+    ssize_t bytes_read = read(fd, buffer, BLOCK_SIZE);
     if (bytes_read == -1) {
         perror("read");
         close(fd);
@@ -41,21 +50,18 @@ void read_block(int block_num, char *buffer) {
 }
 
 // Функция для записи блока
-void write_block(int block_num, const char* buffer, int length) {
-    int fd;
-    off_t offset;
-    ssize_t bytes_written;
-    printf("%s", buffer );
-    fflush(stdout);
+void write_block(const char *block_device_name, int block_num, const char* buffer, int length) {
     // Открываем файл блока устройства SSD для записи
-    fd = open("/dev/nvme0n1p7", O_WRONLY);
+    char path[512];
+    snprintf(path, sizeof(path), "/dev/%s", block_device_name);
+    int fd = open(path, O_WRONLY);
     if (fd == -1) {
         perror("open");
         exit(EXIT_FAILURE);
     }
 
     // Вычисляем смещение для записи блока
-    offset = (off_t) block_num * BLOCK_SIZE;
+    off_t offset = (off_t) block_num * BLOCK_SIZE;
 
     // Позиционируемся на нужном блоке
     if (lseek(fd, offset, SEEK_SET) == -1) {
@@ -65,7 +71,7 @@ void write_block(int block_num, const char* buffer, int length) {
     }
 
     // Записываем содержимое блока
-    bytes_written = write(fd, buffer, length);
+    ssize_t bytes_written = write(fd, buffer, length);
     if (bytes_written == -1) {
         perror("write");
         close(fd);
@@ -76,42 +82,19 @@ void write_block(int block_num, const char* buffer, int length) {
     close(fd);
 }
 
-int is_block_empty(const char *buffer) {
-    for (int i = 0; i < BLOCK_SIZE; ++i) {
-        if (buffer[i] != '\0') {
-            return 0; // Блок не пустой
-        }
+// Функция для форматирования блочного устройства
+void format_block_device(const char *block_device_name) {
+    // Буфер для хранения данных блока
+    char block_buffer[BLOCK_SIZE];
+
+    // Заполнение блока нулями
+    memset(block_buffer, 0, BLOCK_SIZE);
+
+    // Запись нулевого блока во все блоки устройства
+    for (int i = 0; i < TOTAL_BLOCKS; ++i) {
+        write_block(block_device_name, i, block_buffer, BLOCK_SIZE);
     }
-    return 1; // Блок пустой
 }
 
-int is_end_of_device(int block_num) {
-    struct stat st;
-    off_t offset;
-
-    // Открываем файл блока устройства SSD
-    int fd = open("/dev/nvme0n1", O_RDONLY);
-    if (fd == -1) {
-        return 1; // В случае ошибки считаем, что это конец устройства
-    }
-
-    // Вычисляем смещение для чтения блока
-    offset = (off_t) block_num * BLOCK_SIZE;
-
-    // Проверяем, существует ли блок с заданным смещением
-    if (fstat(fd, &st) == -1) {
-        close(fd);
-        return 1; // В случае ошибки считаем, что это конец устройства
-    }
-
-    // Проверяем, достигли ли конца файла (устройства)
-    if (st.st_size <= offset) {
-        close(fd);
-        return 1; // Да, это конец устройства
-    }
-
-    // Нет, это не конец устройства
-    close(fd);
-    return 0;
-}
+// Ваш остальной код здесь...
 
